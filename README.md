@@ -1,18 +1,23 @@
-# ExitSurveyBot
+# StreamBot
 
-Bot de Discord desarrollado en Node.js para enviar automáticamente una encuesta de salida a los miembros cuando ingresan al servidor.
+Bot de Discord desarrollado en Node.js para detectar cuando un usuario inicia una transmisión y publicar una alerta automática en un canal configurado.
 
-La idea principal del bot es entregar al usuario, desde el primer contacto con la comunidad, un enlace de encuesta que pueda guardar y utilizar si en algún momento decide abandonar el servidor. Adicionalmente, el bot puede registrar en un canal de logs cuándo se envió el mensaje de bienvenida y cuándo un usuario sale del servidor.
+El bot puede detectar dos tipos de transmisiones:
+
+* Streaming externo detectado por presencia, por ejemplo Twitch o YouTube.
+* Go Live dentro de Discord en canales de voz.
+
+Cuando detecta que un usuario inicia transmisión, envía un mensaje al canal de alertas con un embed informativo.
 
 ## Funcionalidades
 
-* Detecta cuando un nuevo miembro entra al servidor.
-* Envía un mensaje directo de bienvenida al usuario.
-* Incluye un enlace configurable a una encuesta de salida.
-* Registra en un canal de logs si el DM fue enviado correctamente.
-* Registra cuando un miembro abandona el servidor.
-* Maneja errores cuando Discord no permite enviar mensajes directos al usuario.
-* Usa variables de entorno para proteger credenciales y configuraciones sensibles.
+* Detecta actividad de streaming externo mediante presencia.
+* Detecta Go Live en canales de voz de Discord.
+* Envía alerta automática a un canal configurado.
+* Publica un embed con información del usuario y la actividad.
+* Menciona `@everyone` para avisar a la comunidad.
+* Evita repetir alertas mientras el usuario continúa transmitiendo.
+* Permite extender el comportamiento para filtrar por rol.
 
 ## Stack tecnológico
 
@@ -23,30 +28,28 @@ La idea principal del bot es entregar al usuario, desde el primer contacto con l
 ## Requisitos
 
 * Node.js 18 o superior recomendado.
-* Una aplicación creada en Discord Developer Portal.
-* Token de bot de Discord.
-* Permisos adecuados dentro del servidor.
-* Intents necesarios habilitados para detectar miembros.
+* Aplicación creada en Discord Developer Portal.
+* Bot invitado al servidor.
+* Token del bot.
+* Canal de alertas configurado.
+* Permisos adecuados en el servidor.
+* Intents de presencia y estados de voz habilitados.
 
 ## Variables de entorno
 
-Crea un archivo `.env` en la raíz del proyecto:
+Crear un archivo `.env` en la raíz del proyecto:
 
 ```env
 DISCORD_TOKEN=TU_TOKEN_DEL_BOT
-SURVEY_URL=https://tu-enlace-de-encuesta.com
-LOG_CHANNEL_ID=ID_DEL_CANAL_DE_LOGS
+ALERT_CHANNEL_ID=ID_CANAL_ALERTAS
 ```
 
 ### Descripción de variables
 
-| Variable         | Obligatoria | Descripción                                                    |
-| ---------------- | ----------: | -------------------------------------------------------------- |
-| `DISCORD_TOKEN`  |          Sí | Token del bot generado desde Discord Developer Portal.         |
-| `SURVEY_URL`     |          No | URL de la encuesta de salida que se enviará al usuario por DM. |
-| `LOG_CHANNEL_ID` |          No | ID del canal donde se registrarán mensajes de auditoría.       |
-
-Si `SURVEY_URL` no está configurada, el bot enviará un texto indicando que la variable no fue configurada.
+| Variable           | Obligatoria | Descripción                                            |
+| ------------------ | ----------: | ------------------------------------------------------ |
+| `DISCORD_TOKEN`    |          Sí | Token del bot generado desde Discord Developer Portal. |
+| `ALERT_CHANNEL_ID` |          Sí | Canal donde se enviarán las alertas de streaming.      |
 
 ## Permisos requeridos en Discord
 
@@ -55,19 +58,23 @@ El bot necesita permisos para:
 * Ver canales.
 * Enviar mensajes.
 * Leer historial de mensajes.
-* Enviar mensajes directos a usuarios cuando Discord lo permita.
+* Mencionar `@everyone`.
+* Ver canales de voz.
+* Ver presencia de miembros.
+* Ver estados de voz.
 
-Además, en Discord Developer Portal se recomienda habilitar:
+En Discord Developer Portal se recomienda habilitar:
 
-* Server Members Intent.
+* Presence Intent.
+* Server Members Intent, si se requiere lectura completa de miembros.
 
 ## Instalación
 
 Clonar el repositorio:
 
 ```bash
-git clone https://github.com/itachi364/ExitSurveyBot.git
-cd ExitSurveyBot
+git clone https://github.com/itachi364/StreamBot.git
+cd StreamBot
 ```
 
 Instalar dependencias:
@@ -82,7 +89,7 @@ Crear archivo `.env`:
 cp .env.example .env
 ```
 
-Si no existe `.env.example`, crea manualmente el archivo `.env` con las variables indicadas.
+Si no existe `.env.example`, crear manualmente el archivo `.env`.
 
 Ejecutar el bot:
 
@@ -101,7 +108,7 @@ npm install -g pm2
 Iniciar el bot:
 
 ```bash
-pm2 start npm --name ExitSurveyBot -- start
+pm2 start npm --name StreamBot -- start
 ```
 
 Guardar configuración:
@@ -119,41 +126,75 @@ pm2 startup
 Ver logs:
 
 ```bash
-pm2 logs ExitSurveyBot
+pm2 logs StreamBot
 ```
 
 Reiniciar:
 
 ```bash
-pm2 restart ExitSurveyBot
+pm2 restart StreamBot
 ```
 
 ## Funcionamiento
 
-Cuando un usuario entra al servidor, el bot ejecuta el evento de entrada de miembros y construye un mensaje directo de bienvenida. Ese mensaje incluye el enlace configurado en `SURVEY_URL`.
+El bot escucha eventos de Discord relacionados con presencia y estados de voz.
 
-Si el envío del DM es exitoso, el bot puede publicar un mensaje de confirmación en el canal configurado en `LOG_CHANNEL_ID`.
+### Detección de streaming externo
 
-Si Discord bloquea el DM por configuración de privacidad del usuario, el bot captura el error y registra una advertencia en el canal de logs, si está configurado.
+Cuando Discord reporta una actualización de presencia, el bot revisa las actividades del usuario. Si encuentra una actividad de tipo streaming, genera una alerta en el canal configurado.
 
-Cuando un usuario abandona el servidor, el bot no intenta enviarle un DM en ese momento. Solo registra la salida en el canal de logs, indicando que el enlace ya había sido enviado cuando el usuario ingresó.
+Este flujo aplica para plataformas externas cuando Discord expone la actividad como streaming.
 
-## Consideraciones importantes
+### Detección de Go Live
 
-* Discord puede impedir el envío de mensajes directos si el usuario tiene bloqueados los DMs del servidor.
-* El bot no almacena información en base de datos.
-* El enlace de encuesta debe mantenerse actualizado desde la variable `SURVEY_URL`.
-* El token del bot nunca debe subirse al repositorio.
-* El archivo `.env` debe estar incluido en `.gitignore`.
+Cuando un usuario inicia transmisión dentro de un canal de voz de Discord, el bot detecta el cambio mediante el evento de estado de voz.
 
-## Estructura general
+Si el usuario empieza Go Live y no se había notificado previamente, el bot envía una alerta al canal configurado.
 
-```text
-ExitSurveyBot
-├── index.js
-├── package.json
-└── .env
+### Control de duplicados
+
+El bot usa un conjunto en memoria para evitar enviar muchas alertas mientras el usuario sigue transmitiendo.
+
+Cuando el usuario deja de transmitir por voz, se limpia su estado para permitir futuras alertas.
+
+## Mensaje de alerta
+
+El bot envía un mensaje con:
+
+* Mención `@everyone`.
+* Nombre del usuario que inició la transmisión.
+* Tipo de actividad.
+* Canal de voz, si aplica.
+* URL del stream, si Discord la proporciona.
+* Avatar del usuario.
+* Fecha/hora de la alerta.
+
+## Filtro por rol
+
+El código incluye una constante para limitar alertas a usuarios con un rol específico:
+
+```js
+const STREAMER_ROLE_ID = null;
 ```
+
+Por defecto está en `null`, lo que significa que cualquier usuario puede generar alerta al iniciar transmisión.
+
+Para activar filtro por rol, se puede configurar el ID del rol en el código:
+
+```js
+const STREAMER_ROLE_ID = 'ID_DEL_ROL';
+```
+
+## Limitaciones actuales
+
+* El filtro por rol está definido en código, no en variable de entorno.
+* El bot usa memoria local para controlar streams activos.
+* Si el bot se reinicia, se pierde el estado de transmisiones activas.
+* Las alertas dependen de que Discord entregue correctamente los eventos de presencia o voz.
+* Para streams externos, el usuario debe tener su actividad visible en Discord.
+* No existe base de datos ni historial de alertas.
+* No existe panel administrativo.
+* El mensaje usa `@everyone` de forma fija.
 
 ## Seguridad
 
@@ -165,6 +206,17 @@ Ejemplo recomendado de `.gitignore`:
 node_modules/
 .env
 npm-debug.log*
+```
+
+También se recomienda revisar el uso de `@everyone`, ya que puede generar muchas notificaciones si el servidor tiene alta actividad.
+
+## Estructura general
+
+```text
+StreamBot
+├── index.js
+├── package.json
+└── .env
 ```
 
 ## Comandos útiles
@@ -184,29 +236,44 @@ npm start
 Ejecutar con PM2:
 
 ```bash
-pm2 start npm --name ExitSurveyBot -- start
+pm2 start npm --name StreamBot -- start
 ```
 
 Ver logs:
 
 ```bash
-pm2 logs ExitSurveyBot
+pm2 logs StreamBot
 ```
 
 Reiniciar:
 
 ```bash
-pm2 restart ExitSurveyBot
+pm2 restart StreamBot
+```
+
+## Despliegue recomendado en EC2
+
+Este bot puede ejecutarse junto con otros bots Node.js en una misma instancia EC2 usando PM2.
+
+Ejemplo:
+
+```bash
+cd ~/discord-bots/StreamBot
+npm install
+pm2 start npm --name StreamBot -- start
+pm2 save
 ```
 
 ## Posibles mejoras futuras
 
-* Persistir métricas de usuarios contactados.
-* Registrar respuestas de encuesta si se integra con una API externa.
-* Agregar comandos administrativos para cambiar la URL de encuesta.
+* Mover `STREAMER_ROLE_ID` a variable de entorno.
+* Permitir configurar si se menciona `@everyone`, un rol o nadie.
 * Agregar soporte para múltiples servidores.
+* Persistir historial de transmisiones.
+* Evitar alertas repetidas después de reinicios.
 * Agregar Dockerfile para despliegue en contenedores.
 * Agregar GitHub Actions para validación automática.
+* Agregar comandos administrativos para configurar canal y rol desde Discord.
 
 ## Licencia
 
